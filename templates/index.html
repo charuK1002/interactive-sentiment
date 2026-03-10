@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl">
+        <h1 class="text-3xl font-bold text-gray-800 text-center mb-6">Interactive Sentiment Analyzer</h1>
+        <p class="text-gray-600 text-center mb-8">Enter text or upload a CSV file to analyze its sentiment.</p>
+
+        <!-- Input Form -->
+        <form id="analysisForm" class="space-y-6">
+            <!-- Text Input Section -->
+            <div>
+                <label for="textInput" class="block text-lg font-medium text-gray-700">Single Text Analysis:</label>
+                <input type="text" id="textInput" name="textInput" placeholder="Enter your text here..."
+                       class="mt-2 block w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors">
+            </div>
+
+            <div class="flex items-center justify-between my-4">
+                <hr class="w-full border-gray-300">
+                <span class="px-4 text-gray-500 font-medium">OR</span>
+                <hr class="w-full border-gray-300">
+            </div>
+
+            <!-- File Upload Section -->
+            <div>
+                <label for="fileInput" class="block text-lg font-medium text-gray-700">Upload a CSV file for Batch Analysis:</label>
+                <input type="file" id="fileInput" name="fileInput" accept=".csv"
+                       class="mt-2 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors">
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-center pt-4">
+                <button type="submit" id="analyzeBtn"
+                        class="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all">
+                    Analyze
+                </button>
+            </div>
+        </form>
+
+        <!-- Loading and Results Section -->
+        <div id="loadingMessage" class="hidden text-center mt-6 text-blue-600 font-semibold">
+            <svg class="animate-spin h-5 w-5 mr-3 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Analyzing... this might take a moment.
+        </div>
+        
+        <div id="errorMessage" class="hidden text-center mt-6 text-red-600 font-medium"></div>
+        
+        <!-- Dashboard/Graph Container -->
+        <div id="dashboardContainer" class="hidden mt-8">
+            <div id="sentimentChart" class="w-full"></div>
+            <div id="singleResult" class="hidden text-center mt-4 text-2xl font-semibold text-gray-800"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('analysisForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const textInput = document.getElementById('textInput').value;
+            const fileInput = document.getElementById('fileInput').files[0];
+            const loadingMessage = document.getElementById('loadingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const dashboardContainer = document.getElementById('dashboardContainer');
+            const sentimentChart = document.getElementById('sentimentChart');
+            const singleResult = document.getElementById('singleResult');
+            
+            // Reset previous results and errors
+            errorMessage.classList.add('hidden');
+            dashboardContainer.classList.add('hidden');
+            singleResult.classList.add('hidden');
+            loadingMessage.classList.remove('hidden');
+
+            const formData = new FormData();
+            let hasInput = false;
+
+            if (fileInput) {
+                formData.append('file', fileInput);
+                hasInput = true;
+            } else if (textInput.trim() !== '') {
+                formData.append('text', textInput.trim());
+                hasInput = true;
+            } else {
+                loadingMessage.classList.add('hidden');
+                errorMessage.textContent = 'Please enter text or upload a CSV file.';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+
+                loadingMessage.classList.add('hidden');
+
+                if (response.ok) {
+                    if (data.results) {
+                        // Handle CSV file results (bar chart)
+                        const counts = data.results;
+                        const labels = Object.keys(counts);
+                        const values = Object.values(counts);
+
+                        const plotData = [{
+                            x: labels,
+                            y: values,
+                            type: 'bar',
+                            marker: {
+                                color: ['#4ade80', '#ef4444', '#6b7280']
+                            }
+                        }];
+
+                        const layout = {
+                            title: 'Overall Sentiment Analysis',
+                            font: {
+                                family: 'Inter',
+                                size: 14,
+                                color: '#374151'
+                            },
+                            xaxis: { title: 'Sentiment' },
+                            yaxis: { title: 'Count' }
+                        };
+
+                        Plotly.newPlot('sentimentChart', plotData, layout);
+                        sentimentChart.classList.remove('hidden');
+                        singleResult.classList.add('hidden');
+                    } else if (data.result) {
+                        // Handle single text result
+                        singleResult.textContent = `Sentiment: ${data.result}`;
+                        singleResult.classList.remove('hidden');
+                        sentimentChart.classList.add('hidden');
+                    }
+                    dashboardContainer.classList.remove('hidden');
+                } else {
+                    errorMessage.textContent = data.error || 'Something went wrong on the server.';
+                    errorMessage.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                loadingMessage.classList.add('hidden');
+                errorMessage.textContent = 'Failed to connect to the server. Please check the terminal for errors.';
+                errorMessage.classList.remove('hidden');
+                console.error('Fetch error:', error);
+            }
+        });
+    </script>
+
+</body>
+</html>
